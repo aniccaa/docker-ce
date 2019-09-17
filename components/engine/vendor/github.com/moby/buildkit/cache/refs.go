@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/containerd/containerd/mount"
@@ -423,12 +424,16 @@ type readOnlyMounter struct {
 	snapshot.Mountable
 }
 
-func (m *readOnlyMounter) Mount() ([]mount.Mount, error) {
-	mounts, err := m.Mountable.Mount()
+func (m *readOnlyMounter) Mount() ([]mount.Mount, func() error, error) {
+	mounts, release, err := m.Mountable.Mount()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for i, m := range mounts {
+		if m.Type == "overlay" {
+			mounts[i].Options = readonlyOverlay(m.Options)
+			continue
+		}
 		opts := make([]string, 0, len(m.Options))
 		for _, opt := range m.Options {
 			if opt != "rw" {
@@ -438,5 +443,25 @@ func (m *readOnlyMounter) Mount() ([]mount.Mount, error) {
 		opts = append(opts, "ro")
 		mounts[i].Options = opts
 	}
-	return mounts, nil
+	return mounts, release, nil
+}
+
+func readonlyOverlay(opt []string) []string {
+	out := make([]string, 0, len(opt))
+	upper := ""
+	for _, o := range opt {
+		if strings.HasPrefix(o, "upperdir=") {
+			upper = strings.TrimPrefix(o, "upperdir=")
+		} else if !strings.HasPrefix(o, "workdir=") {
+			out = append(out, o)
+		}
+	}
+	if upper != "" {
+		for i, o := range out {
+			if strings.HasPrefix(o, "lowerdir=") {
+				out[i] = "lowerdir=" + upper + ":" + strings.TrimPrefix(o, "lowerdir=")
+			}
+		}
+	}
+	return out
 }

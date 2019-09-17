@@ -28,30 +28,6 @@ export SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export MAKEDIR="$SCRIPTDIR/make"
 export PKG_CONFIG=${PKG_CONFIG:-pkg-config}
 
-# We're a nice, sexy, little shell script, and people might try to run us;
-# but really, they shouldn't. We want to be in a container!
-inContainer="AssumeSoInitially"
-if [ "$(go env GOHOSTOS)" = 'windows' ]; then
-	if [ -z "$FROM_DOCKERFILE" ]; then
-		unset inContainer
-	fi
-else
-	if [ "$PWD" != "/go/src/$DOCKER_PKG" ]; then
-		unset inContainer
-	fi
-fi
-
-if [ -z "$inContainer" ]; then
-	{
-		echo "# WARNING! I don't seem to be running in a Docker container."
-		echo "# The result of this command might be an incorrect build, and will not be"
-		echo "# officially supported."
-		echo "#"
-		echo "# Try this instead: make all"
-		echo "#"
-	} >&2
-fi
-
 echo
 
 # List of bundles to create when no argument is passed
@@ -115,14 +91,6 @@ elif ${PKG_CONFIG} 'libsystemd-journal' 2> /dev/null ; then
 	DOCKER_BUILDTAGS+=" journald journald_compat"
 fi
 
-# test whether "btrfs/version.h" exists and apply btrfs_noversion appropriately
-if \
-	command -v gcc &> /dev/null \
-	&& ! gcc -E - -o /dev/null &> /dev/null <<<'#include <btrfs/version.h>' \
-; then
-	DOCKER_BUILDTAGS+=' btrfs_noversion'
-fi
-
 # test whether "libdevmapper.h" is new enough to support deferred remove
 # functionality. We favour libdm_dlsym_deferred_remove over
 # libdm_no_deferred_remove in dynamic cases because the binary could be shipped
@@ -178,13 +146,6 @@ main() {
 		echo
 	fi
 	mkdir -p bundles
-
-	# Windows and symlinks don't get along well
-	if [ "$(go env GOHOSTOS)" != 'windows' ]; then
-		rm -f bundles/latest
-		# preserve latest symlink for backward compatibility
-		ln -sf . bundles/latest
-	fi
 
 	if [ $# -lt 1 ]; then
 		bundles=(${DEFAULT_BUNDLES[@]})

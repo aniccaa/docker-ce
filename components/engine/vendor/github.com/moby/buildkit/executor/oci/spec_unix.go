@@ -101,11 +101,11 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	}
 
 	if meta.SecurityMode == pb.SecurityMode_INSECURE {
-		//make sysfs rw mount for insecure mode.
-		for _, m := range s.Mounts {
-			if m.Type == "sysfs" {
-				m.Options = []string{"nosuid", "noexec", "nodev", "rw"}
-			}
+		if err = oci.WithWriteableCgroupfs(ctx, nil, c, s); err != nil {
+			return nil, nil, err
+		}
+		if err = oci.WithWriteableSysfs(ctx, nil, c, s); err != nil {
+			return nil, nil, err
 		}
 	}
 
@@ -136,12 +136,12 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 			releaseAll()
 			return nil, nil, errors.Wrapf(err, "failed to mount %s", m.Dest)
 		}
-		mounts, err := mountable.Mount()
+		mounts, release, err := mountable.Mount()
 		if err != nil {
 			releaseAll()
 			return nil, nil, errors.WithStack(err)
 		}
-		releasers = append(releasers, mountable.Release)
+		releasers = append(releasers, release)
 		for _, mount := range mounts {
 			mount, err = sm.subMount(mount, m.Selector)
 			if err != nil {

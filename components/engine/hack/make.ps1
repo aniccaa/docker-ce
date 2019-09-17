@@ -134,7 +134,7 @@ Function Check-InContainer() {
 # outside of a container where it may be out of date with master.
 Function Verify-GoVersion() {
     Try {
-        $goVersionDockerfile=(Select-String -Path ".\Dockerfile" -Pattern "^ARG[\s]+GO_VERSION=(.*)$").Matches.groups[1].Value.TrimEnd(".0")
+        $goVersionDockerfile=(Select-String -Path ".\Dockerfile" -Pattern "^ARG[\s]+GO_VERSION=(.*)$").Matches.groups[1].Value -replace '\.0$',''
         $goVersionInstalled=(go version).ToString().Split(" ")[2].SubString(2)
     }
     Catch [Exception] {
@@ -340,6 +340,7 @@ Function Run-IntegrationTests() {
         Write-Host "Running $($PWD.Path)"
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         $pinfo.FileName = "$($PWD.Path)\test.exe"
+        $pinfo.WorkingDirectory = "$($PWD.Path)"
         $pinfo.RedirectStandardError = $true
         $pinfo.UseShellExecute = $false
         $pinfo.Arguments = $env:INTEGRATION_TESTFLAGS
